@@ -9,6 +9,15 @@ A Python project for monitoring ISP uptime and performance with a real-time dash
 - Threaded speedtest to keep UI responsive
 - 5-minute scrolling ping window with wall-clock time
 - Metrics for min/max/avg ping and speedtest results
+- **Packet loss tracking and display**
+- **Red X markers on the ping chart for lost packets**
+- **Unified, simple UI with all results in a right-side column**
+
+## Example Dashboard
+
+![Example Dashboard](example_dashboard.png)
+
+*Red X markers indicate lost ping packets. Metrics and speedtest results are shown in the right column.*
 
 ## Project Structure
 

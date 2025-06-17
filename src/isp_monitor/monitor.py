@@ -38,7 +38,7 @@ class ISPMonitor:
         except Exception as e:
             logger.error(f"Error measuring ping: {e}")
             return 0.0
-    def measure_speed(self, force=False) -> Dict[str, float]:
+    def measure_speed(self, force=False, progress_callback=None) -> Dict[str, float]:
         if not self.speedtest_available:
             logger.error("Speedtest is not available.")
             return {"download": 0.0, "upload": 0.0, "error": True}
@@ -48,8 +48,26 @@ class ISPMonitor:
         try:
             logger.info("Starting speed test...")
             self.speedtest.get_best_server()
-            download_speed = self.speedtest.download() / 1_000_000
-            upload_speed = self.speedtest.upload() / 1_000_000
+            # Real-time download progress
+            download_progress = []
+            def download_callback(*args, **kwargs):
+                if len(args) >= 3:
+                    bytes_received, total_bytes, elapsed = args[:3]
+                    mbps = (bytes_received * 8) / (elapsed * 1_000_000) if elapsed > 0 else 0.0
+                    if progress_callback:
+                        progress_callback('download', elapsed, mbps)
+                    download_progress.append((elapsed, mbps))
+            download_speed = self.speedtest.download(callback=download_callback) / 1_000_000
+            # Real-time upload progress
+            upload_progress = []
+            def upload_callback(*args, **kwargs):
+                if len(args) >= 3:
+                    bytes_sent, total_bytes, elapsed = args[:3]
+                    mbps = (bytes_sent * 8) / (elapsed * 1_000_000) if elapsed > 0 else 0.0
+                    if progress_callback:
+                        progress_callback('upload', elapsed, mbps)
+                    upload_progress.append((elapsed, mbps))
+            upload_speed = self.speedtest.upload(callback=upload_callback) / 1_000_000
             self.last_speed_test = current_time
             logger.info(f"Speed test completed: {download_speed:.1f} Mbps down, {upload_speed:.1f} Mbps up")
             return {"download": download_speed, "upload": upload_speed}
