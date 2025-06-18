@@ -5,6 +5,7 @@ Features:
 - Real-time ping monitoring with min/max/avg and packet loss tracking
 - Red X markers on the ping plot for lost packets
 - Speedtest with indeterminate progress bar and results display
+- DNS leak testing with detailed results
 - Unified, simple UI with all results in a right-side column
 """
 
@@ -16,14 +17,15 @@ from typing import List, Tuple
 
 import numpy as np
 from PyQt6.QtWidgets import (
-    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QFrame, QSplitter, QProgressBar
+    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QFrame, QSplitter, QProgressBar,
+    QDialog
 )
 from PyQt6.QtCore import QTimer, Qt, QThread, pyqtSignal
 import pyqtgraph as pg
 from pyqtgraph import AxisItem
 
 from .monitor import ISPMonitor
-from .workers import SpeedTestWorker
+from .workers import SpeedTestWorker, DNSLeakTestWorker
 from .utils import format_time
 
 class TimeAxisItem(AxisItem):
@@ -45,6 +47,8 @@ class MonitoringDashboard(QMainWindow):
         self.speedtest_running = False
         self.speed_label_item = None
         self.speedtest_thread = None
+        self.dns_test_thread = None
+        self.dns_test_running = False
         if run_speedtest_at_start:
             self.run_speed_test_now()
 
@@ -67,7 +71,14 @@ class MonitoringDashboard(QMainWindow):
         self.speedtest_button = QPushButton("Run Speed Test Now")
         self.speedtest_button.clicked.connect(self.run_speed_test_now)
         status_layout.addWidget(self.speedtest_button)
+        
+        # Add DNS leak test button
+        self.dns_test_button = QPushButton("Run DNS Leak Test")
+        self.dns_test_button.clicked.connect(self.run_dns_leak_test)
+        status_layout.addWidget(self.dns_test_button)
+        
         main_layout.addLayout(status_layout)
+
         # Show error if speedtest is not available
         if not self.monitor.speedtest_available:
             self.speedtest_button.setEnabled(False)
@@ -75,6 +86,29 @@ class MonitoringDashboard(QMainWindow):
             self.speed_error_label = QLabel("Speedtest initialization failed. Try again later or check your network.")
             self.speed_error_label.setStyleSheet("color: red;")
             main_layout.addWidget(self.speed_error_label)
+
+        # DNS leak test results box
+        self.dns_result_box = QFrame()
+        self.dns_result_box.setFrameShape(QFrame.Shape.StyledPanel)
+        self.dns_result_box.setFixedWidth(200)
+        self.dns_result_layout = QVBoxLayout(self.dns_result_box)
+        self.dns_result_title = QLabel("DNS Leak Test")
+        self.dns_result_title.setStyleSheet("font-size: 20px; font-weight: bold; color: #ff69b4; background: #222; border-radius: 8px; padding: 4px; margin-bottom: 4px;")
+        self.dns_result_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.dns_result_layout.addWidget(self.dns_result_title)
+        self.dns_result_label = QLabel("")
+        self.dns_result_label.setStyleSheet("font-size: 18px; color: white; background: #222; border-radius: 8px; padding: 12px;")
+        self.dns_result_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.dns_result_layout.addWidget(self.dns_result_label)
+        self.dns_result_box.hide()
+
+        # DNS leak test progress bar
+        self.dns_progress = QProgressBar()
+        self.dns_progress.setMinimum(0)
+        self.dns_progress.setMaximum(100)
+        self.dns_progress.hide()
+        main_layout.addWidget(self.dns_progress)
+
         # Splitter for vertical space
         self.splitter = QSplitter()
         self.splitter.setOrientation(Qt.Orientation.Vertical)
@@ -121,6 +155,8 @@ class MonitoringDashboard(QMainWindow):
         self.result_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.result_layout.addWidget(self.result_label)
         metrics_col.addWidget(self.result_box)
+        # Add DNS result box to metrics column
+        metrics_col.addWidget(self.dns_result_box)
         metrics_col.addStretch(1)
         ping_layout.addLayout(metrics_col, 1)
         self.splitter.addWidget(ping_panel)
@@ -291,6 +327,107 @@ class MonitoringDashboard(QMainWindow):
             self.speed_label.setText("Speed: -- Mbps")
             self.speed_progress.hide()
             self.result_box.hide()
+
+    def run_dns_leak_test(self):
+        """Run a DNS leak test in a background thread."""
+        if self.dns_test_running:
+            return
+        
+        self.dns_test_running = True
+        self.dns_test_button.setEnabled(False)
+        self.dns_test_button.setText("DNS Test Running...")
+        self.dns_progress.show()
+        self.dns_result_box.hide()
+        
+        self.dns_test_thread = DNSLeakTestWorker()
+        self.dns_test_thread.progress.connect(self.handle_dns_test_progress)
+        self.dns_test_thread.result_ready.connect(self.handle_dns_test_result)
+        self.dns_test_thread.finished.connect(self.cleanup_dns_test_thread)
+        self.dns_test_thread.start()
+
+    def handle_dns_test_progress(self, progress):
+        """Update DNS leak test progress bar."""
+        self.dns_progress.setValue(int(progress))
+
+    def handle_dns_test_result(self, results):
+        """Display DNS leak test results."""
+        is_leaking = results["is_leaking"]
+        self.dns_test_results = results  # Store results for the details dialog
+        
+        status_color = "#ff4444" if is_leaking else "#44ff44"
+        status_text = "LEAKING" if is_leaking else "SECURE"
+        
+        result_text = f"Status: <span style='color: {status_color}'>{status_text}</span>"
+        
+        self.dns_result_label.setText(result_text)
+        
+        # Add "More Info" button if not already added
+        if not hasattr(self, 'dns_more_info_button'):
+            self.dns_more_info_button = QPushButton("More Info")
+            self.dns_more_info_button.clicked.connect(self.show_dns_details)
+            self.dns_result_layout.addWidget(self.dns_more_info_button)
+        
+        self.dns_result_box.show()
+        self.dns_progress.hide()
+        self.dns_test_button.setEnabled(True)
+        self.dns_test_button.setText("Run DNS Leak Test")
+        self.dns_test_running = False
+
+    def show_dns_details(self):
+        """Show the DNS leak test details dialog."""
+        if hasattr(self, 'dns_test_results'):
+            dialog = DNSDetailsDialog(self.dns_test_results, self)
+            dialog.exec()
+
+    def cleanup_dns_test_thread(self):
+        """Clean up the DNS leak test thread."""
+        self.dns_test_thread = None
+        self.dns_test_running = False
+        self.dns_test_button.setEnabled(True)
+        self.dns_test_button.setText("Run DNS Leak Test")
+        self.dns_progress.hide()
+
+class DNSDetailsDialog(QDialog):
+    """Dialog window for displaying detailed DNS leak test results."""
+    def __init__(self, results, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("DNS Leak Test Details")
+        self.setMinimumWidth(400)
+        
+        layout = QVBoxLayout(self)
+        
+        # Status
+        is_leaking = results["is_leaking"]
+        status_color = "#ff4444" if is_leaking else "#44ff44"
+        status_text = "LEAKING" if is_leaking else "SECURE"
+        
+        status_label = QLabel(f"Status: <span style='color: {status_color}'>{status_text}</span>")
+        status_label.setStyleSheet("font-size: 18px;")
+        layout.addWidget(status_label)
+        
+        # Configured DNS
+        layout.addWidget(QLabel("<b>Configured DNS Servers:</b>"))
+        for server in results["configured_dns"]:
+            layout.addWidget(QLabel(server))
+        
+        # Unexpected servers (if leaking)
+        if is_leaking:
+            layout.addWidget(QLabel(""))  # Spacer
+            layout.addWidget(QLabel("<b>Unexpected DNS Servers:</b>"))
+            layout.addWidget(QLabel("The following servers were detected but not configured:"))
+            for server in results["unexpected_servers"]:
+                layout.addWidget(QLabel(server))
+        
+        # Test details
+        layout.addWidget(QLabel(""))  # Spacer
+        layout.addWidget(QLabel("<b>Test Details:</b>"))
+        layout.addWidget(QLabel(f"Domains tested: {results['details']['domains_tested']}"))
+        layout.addWidget(QLabel(f"Total servers detected: {results['details']['total_servers_detected']}"))
+        
+        # Close button
+        close_button = QPushButton("Close")
+        close_button.clicked.connect(self.accept)
+        layout.addWidget(close_button)
 
 def run_dashboard(run_speedtest_at_start=True):
     """Run the monitoring dashboard."""

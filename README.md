@@ -1,23 +1,21 @@
 # ISP Uptime Monitoring
 
-A Python project for monitoring ISP uptime and performance with a real-time dashboard.
+Real-time ISP performance monitoring dashboard built with Python and PyQt6.
 
 ## Features
-- Real-time ping and speedtest monitoring
-- Beautiful PyQt6 dashboard with charts and metrics
-- Modular, maintainable codebase
-- Threaded speedtest to keep UI responsive
-- 5-minute scrolling ping window with wall-clock time
-- Metrics for min/max/avg ping and speedtest results
-- **Packet loss tracking and display**
-- **Red X markers on the ping chart for lost packets**
-- **Unified, simple UI with all results in a right-side column**
+- Real-time ping monitoring
+- Speed testing
+- DNS leak detection
+- Packet loss tracking
+- 5-minute scrolling ping window
+- Min/max/avg ping metrics
+- Download/upload speed metrics
 
-## Example Dashboard
+## Dashboard View
 
-![Example Dashboard](example_dashboard.png)
+![Dashboard](example_dashboard.png)
 
-*Red X markers indicate lost ping packets. Metrics and speedtest results are shown in the right column.*
+*Dashboard showing ping response graph with packet loss markers (X), current metrics, and test results.*
 
 ## Project Structure
 
@@ -30,9 +28,24 @@ src/
     monitor.py      # ISPMonitor: ping and speedtest logic
     workers.py      # QThread-based background workers
     utils.py        # Utility functions (e.g., time formatting)
+    dns_leak.py     # DNS leak testing functionality
 tests/
   ...
 ```
+
+## Features in Detail
+
+### DNS Leak Testing
+- Tests if DNS requests route through configured DNS servers
+- Identifies unexpected DNS servers in use
+- Shows configured and detected DNS servers
+- Useful for VPN DNS configuration verification
+
+### Network Monitoring
+- Continuous ping monitoring with statistics
+- Packet loss detection
+- Speed testing with download/upload measurements
+- Real-time data visualization
 
 ## Setup
 
@@ -51,19 +64,19 @@ tests/
 
 ## Install with pip or pipx
 
-You can install directly from GitHub:
+Install from GitHub:
 
 ```bash
 pip install git+https://github.com/josh-whitcomb/isp_monitor.git
 ```
 
-Or, for isolated CLI usage:
+Or with pipx:
 
 ```bash
 pipx install git+https://github.com/josh-whitcomb/isp_monitor.git
 ```
 
-Then run:
+Run:
 
 ```bash
 isp-uptime-monitor
@@ -84,11 +97,9 @@ Optional arguments:
 - Use `flake8` for linting
 - Use `pytest` for testing
 
-## Notes
-- The dashboard is fully modular and easy to extend.
-- All network logic is in `monitor.py`, all threading in `workers.py`, and all UI in `dashboard.py`.
-- The ping chart pauses during speed tests for accuracy.
-
----
-
-Enjoy monitoring your ISP uptime and performance! 
+## Implementation Notes
+- Network logic in `monitor.py`
+- Threading in `workers.py`
+- UI in `dashboard.py`
+- DNS leak testing in `dns_leak.py`
+- Ping monitoring pauses during speed tests 

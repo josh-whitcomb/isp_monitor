@@ -3,6 +3,7 @@ requests>=2.31.0
 python-dotenv>=1.0.0
 ping3>=4.0.0
 speedtest-cli>=2.1.3
+dnspython>=2.4.0
 
 # GUI and Charting
 PyQt6>=6.6.0
